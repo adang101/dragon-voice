@@ -1,3 +1,4 @@
+// File: index.js
 const {
   Client,
   GatewayIntentBits,
@@ -65,7 +66,7 @@ async function translateText(text, targetLang, sourceLang = "fr") {
     return deeplResponse.data.translations[0].text;
   } catch (error) {
     console.log("DeepL translation failed.");
-    console.error(error);
+    console.error(error.response.data);
   }
 }
 
@@ -169,29 +170,54 @@ client.on("interactionCreate", async (interaction) => {
         };
       }
 
-      // Create embeds for each language
-      for (const lang of LANGUAGES) {
-        const embed = new EmbedBuilder()
-          .setColor(0x0099ff)
-          .setTitle(translations[lang.code].name)
-          .setDescription(translations[lang.code].description)
-          .addFields(
-            { name: "UTC", value: `${eventDate} ${eventTime}`, inline: false },
-            ...timeConversions.map((tc) => {
-              return {
-                name: tc.zone,
-                value: `${tc.time} (${tc.day})`,
-                inline: true,
-              };
-            })
-          )
-          .setFooter({ text: `Language: ${lang.name}` });
+      // Create a single embed with all translations
+      const embed = new EmbedBuilder()
+        .setColor(0x0099ff)
+        .setTitle(`🌍 Alliance Event: ${eventName}`)
+        .setDescription(`Original (French): ${eventDesc}`)
+        .addFields(
+          {
+            name: "📅 Event Date & Time (UTC)",
+            value: `${eventDate} ${eventTime}`,
+            inline: false,
+          },
+          ...timeConversions.map((tc) => {
+            return {
+              name: tc.zone,
+              value: `${tc.time} (${tc.day})`,
+              inline: true,
+            };
+          })
+        );
 
-        await channel.send({ embeds: [embed] });
+      // Add event names in all languages
+      let namesField = "";
+      let descriptionsField = "";
+
+      for (const lang of LANGUAGES) {
+        namesField += `**${lang.name}**: ${translations[lang.code].name}\n`;
+        descriptionsField += `**${lang.name}**: ${
+          translations[lang.code].description
+        }\n\n`;
       }
 
+      embed.addFields(
+        {
+          name: "🌐 Event Name Translations",
+          value: namesField,
+          inline: false,
+        },
+        {
+          name: "📝 Event Description Translations",
+          value: descriptionsField,
+          inline: false,
+        }
+      );
+
+      await channel.send({ embeds: [embed] });
+
       await interaction.editReply(
-        "Event created and notifications sent in all languages!"
+        "Event created and notification sent with all translations!"
       );
     } catch (error) {
       console.error("Error creating event:", error);
