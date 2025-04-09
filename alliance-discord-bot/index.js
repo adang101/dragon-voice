@@ -1,4 +1,3 @@
-// File: index.js
 const {
   Client,
   GatewayIntentBits,
