@@ -14,6 +14,9 @@ const axios = require("axios");
 
 dotenv.config();
 
+const keepAlive = require("./keep_alive.js");
+keepAlive();
+
 // Bot configuration
 const client = new Client({
   intents: [
@@ -37,17 +40,16 @@ const TIME_ZONES = [
 // Languages to translate to
 const LANGUAGES = [
   { code: "en", name: "English" },
-  { code: "es", name: "Spanish" },
-  { code: "zh", name: "Chinese" },
-  { code: "hu", name: "Hungarian" },
-  { code: "de", name: "German" },
-  { code: "ja", name: "Japanese" },
+  { code: "es", name: "Español" },
+  { code: "pt", name: "Português" },
+  { code: "zh", name: "中文" },
+  { code: "hu", name: "Magyar" },
+  { code: "fr", name: "Français" },
 ];
 
 // Translation function (using DeepL API)
-async function translateText(text, targetLang, sourceLang = "fr") {
+async function translateText(text, targetLang, sourceLang) {
   try {
-    // Try DeepL first
     const deeplResponse = await axios.post(
       "https://api-free.deepl.com/v2/translate",
       {
@@ -110,6 +112,17 @@ const commands = [
         .setDescription("Event time in UTC (HH:MM)")
         .setRequired(true)
     )
+    .addStringOption((option) =>
+      option
+        .setName("language")
+        .setDescription("Input language")
+        .setRequired(true)
+        .addChoices(
+          { name: "French", value: "fr" },
+          { name: "English", value: "en" },
+          { name: "Portuguese", value: "pt" }
+        )
+    )
     .addChannelOption((option) =>
       option
         .setName("channel")
@@ -149,8 +162,13 @@ client.on("interactionCreate", async (interaction) => {
     const eventDesc = interaction.options.getString("description");
     const eventDate = interaction.options.getString("date");
     const eventTime = interaction.options.getString("time");
+    const sourceLanguage = interaction.options.getString("language") || "fr";
     const channel =
       interaction.options.getChannel("channel") || interaction.channel;
+
+    // Get language name for display
+    const sourceLangName =
+      LANGUAGES.find((l) => l.code === sourceLanguage)?.name || "French";
 
     // Combine date and time for UTC
     const utcDateTime = `${eventDate} ${eventTime}`;
@@ -162,19 +180,31 @@ client.on("interactionCreate", async (interaction) => {
       // Create translation results object
       const translations = {};
 
-      // Translate event name and description to all languages
-      for (const lang of LANGUAGES) {
+      // Translate event name and description to all languages except source language
+      for (const lang of LANGUAGES.filter(
+        (lang) => lang.code !== sourceLanguage
+      )) {
         translations[lang.code] = {
-          name: await translateText(eventName, lang.code),
-          description: await translateText(eventDesc, lang.code),
+          name: await translateText(eventName, lang.code, sourceLanguage),
+          description: await translateText(
+            eventDesc,
+            lang.code,
+            sourceLanguage
+          ),
         };
       }
+
+      // Add original text to translations
+      translations[sourceLanguage] = {
+        name: eventName,
+        description: eventDesc,
+      };
 
       // Create a single embed with all translations
       const embed = new EmbedBuilder()
         .setColor(0x0099ff)
         .setTitle(`🌍 Alliance Event: ${eventName}`)
-        .setDescription(`Original (French): ${eventDesc}`)
+        .setDescription(`Original (${sourceLangName}): ${eventDesc}`)
         .addFields(
           {
             name: "📅 Event Date & Time (UTC)",
@@ -195,6 +225,9 @@ client.on("interactionCreate", async (interaction) => {
       let descriptionsField = "";
 
       for (const lang of LANGUAGES) {
+        // Skip if translations don't exist (should only be the case if we didn't translate)
+        if (!translations[lang.code]) continue;
+
         namesField += `**${lang.name}**: ${translations[lang.code].name}\n`;
         descriptionsField += `**${lang.name}**: ${
           translations[lang.code].description
